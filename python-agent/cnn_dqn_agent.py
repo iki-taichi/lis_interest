@@ -99,7 +99,7 @@ class CnnDqnAgent(object):
         # Generate an Action by e-greedy action selection
         action, q_now, deg_intereset = self.q_net.e_greedy(state_, eps)
 
-        return action, eps, q_now, new_feature_vec
+        return action, eps, q_now, new_feature_vec, deg_intereset
     
     def agent_step_update(self, reward, action, eps, q_now, new_feature_vec, deg_intereset):
         # Learning Phase
