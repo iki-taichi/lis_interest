@@ -1,0 +1,19 @@
+# lis_interest
+
+unity側
+stateはそのまま
+actionにdegInteresetを追加
+FirstPersonControlerのFixedUpdateでの移動量の変更
+
+python側
+send_actionでdegInteresetも返すようにする
+featureextractorのfactorなど微調整
+q_net.pyLSTMのクラスを追加
+* update_prediction: self.Pを更新
+* calc_deg_intereset: self.Eを更新, 自身は0-1の興味度を返す
+e_gredyでcalc_deg_intereset, update_prediction, LSTMエラーの積算
+uodate_model_targetでbackprop
+deg_interesetも返すようにする
+
+問題点, feature_vecに対してそのままフルコネクトのLSTMをつけるとメモリーがかつかつ。
+convLSTMに変えるなど工夫が必要かも
