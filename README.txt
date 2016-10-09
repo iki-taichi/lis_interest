@@ -18,4 +18,6 @@ LSTMクラスはupdate_model_target内でbackprop
 deg_interesetも返すようにする
 
 問題点, feature_vecに対してそのままフルコネクトのLSTMをつけるとメモリーがかつかつ。
+1 stepの計算時間がかなり長い...
 convLSTMに変えるなど工夫が必要かも
+
