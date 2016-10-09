@@ -26,9 +26,7 @@ class CnnDqnAgent(object):
     
     def _observation_to_featurevec(self, observation):
         feature_image = [self.feature_extractor(observation["image"][i]) for i in xrange(self.image_feature_count)]
-        print('before cocat')
         return np.concatenate(feature_image + observation["depth"])
-        print('after cocat')
 
     def agent_init(self, **options):
         self.use_gpu = options['use_gpu']

@@ -201,6 +201,7 @@ class QNet:
         for s in x.data.shape: p= p*s
         return F.reshape(x, (1, s))
         
+    
     def e_greedy(self, state, epsilon):
         var_s = Variable(state)
         deg_intereset = self.Predictor.calc_deg_interest(var_s[:, 0, :]).data
@@ -208,7 +209,7 @@ class QNet:
         
         var_q = self.model(var_s)
         q = var_q.data
-        self.Predictor.update_prediction(F.concat([self.flatten(var_s),self.flatten(var_q)], axis=1))
+        self.Predictor.update_prediction(F.concat([self.flatten(var_s), self.flatten(var_q)], axis=1))
         
         if np.random.rand() < epsilon:
             index_action = np.random.randint(0, self.num_of_actions)
