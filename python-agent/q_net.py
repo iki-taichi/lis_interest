@@ -109,7 +109,6 @@ class QNet:
                   np.zeros((self.data_size, 1), dtype=np.bool)]
     
     def forward(self, state, action, reward, state_dash, episode_end):
-        print('forward')
         num_of_batch = state.shape[0]
 
         q = self.model(Variable(state))  # Get Q-value
@@ -154,7 +153,6 @@ class QNet:
     def stock_experience(self, time,
                         state, action, reward, state_dash,
                         episode_end_flag):
-        print('store')
         data_index = time % self.data_size
 
         if episode_end_flag is True:
@@ -169,7 +167,6 @@ class QNet:
         self.d[4][data_index] = episode_end_flag
     
     def experience_replay(self, time):
-        print('replay')
         if self.initial_exploration < time:
             # Pick up replay_size number of samples from the Data
             if time < self.data_size:  # during the first sweep of the History Data
@@ -204,19 +201,14 @@ class QNet:
         for s in x.data.shape: p= p*s
         return F.reshape(x, (1, s))
         
-    
     def e_greedy(self, state, epsilon):
         var_s = Variable(state)
         deg_intereset = self.Predictor.calc_deg_interest(var_s[:, 0, :]).data
         self.predictor_error += self.Predictor.E
         
-        print('aaaa')
-        
         var_q = self.model(var_s)
         q = var_q.data
         self.Predictor.update_prediction(F.concat([self.flatten(var_s),self.flatten(var_q)], axis=1))
-        
-        print('bbbbb')
         
         if np.random.rand() < epsilon:
             index_action = np.random.randint(0, self.num_of_actions)
