@@ -23,9 +23,11 @@ class CnnDqnAgent(object):
         self.model_type = 'alexnet'
         self.image_feature_dim = 256 * 6 * 6
         self.image_feature_count = 1
+
+        self.prediction_update_tick = 0
     
     def _observation_to_featurevec(self, observation):
-        feature_image = [self.feature_extractor(observation["image"][i]) for i in xrange(self.image_feature_count)]
+        feature_image = [self.feature_extractor(observation["image"][i]) for i in range(self.image_feature_count)]
         return np.concatenate(feature_image + observation["depth"])
 
     def agent_init(self, **options):
@@ -34,8 +36,9 @@ class CnnDqnAgent(object):
         self.q_net_input_dim = self.image_feature_dim * self.image_feature_count + self.depth_image_dim
 
         if os.path.exists(self.cnn_feature_extractor):
-            print("loading... " + self.cnn_feature_extractor),
-            self.feature_extractor = pickle.load(open(self.cnn_feature_extractor, 'rb'))
+            print("loading... " + self.cnn_feature_extractor)
+            with open(self.cnn_feature_extractor, 'rb') as f:
+                self.feature_extractor = pickle.load(f)
             print("done")
         else:
             print('there is no chainer alexnet model file ', self.cnn_feature_extractor)
@@ -59,7 +62,7 @@ class CnnDqnAgent(object):
         # Generate an Action e-greedy
         state_ = np.expand_dims(self.state, 0)
         if self.use_gpu >= 0:
-            state_ = cuda.to_gpu(state_)
+            state_ = cuda.to_gpu(state_, device=self.use_gpu)
         action, _, deg_intereset = self.q_net.e_greedy(state_, self.epsilon)
         return_action = action
 
@@ -79,7 +82,7 @@ class CnnDqnAgent(object):
         # Exploration decays along the time sequence
         state_ = np.expand_dims(self.state, 0)
         if self.use_gpu >= 0:
-            state_ = cuda.to_gpu(state_)
+            state_ = cuda.to_gpu(state_, device=self.use_gpu)
 
         if self.policy_frozen is False:  # Learning ON/OFF
             if self.q_net.initial_exploration < self.time:
@@ -104,6 +107,12 @@ class CnnDqnAgent(object):
         if self.policy_frozen is False:  # Learning ON/OFF
             self.q_net.stock_experience(self.time, self.last_state, self.last_action, reward, self.state, False)
             self.q_net.experience_replay(self.time)
+        
+        self.prediction_update_tick += 1
+        if self.prediction_update_tick >= 10:
+            self.prediction_update_tick = 0
+            print('prediction update')
+            self.q_net.prediction_update()
 
         # Target model update
         if self.q_net.initial_exploration < self.time and np.mod(self.time, self.q_net.target_model_update_freq) == 0:

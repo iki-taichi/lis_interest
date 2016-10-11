@@ -12,7 +12,8 @@ class QCalculationChain(chainer.Chain):
     def __init__(self, input_size, hidden_size, output_size):
         super(QCalculationChain, self).__init__(
                 l4 = L.Linear(input_size, hidden_size, wscale=np.sqrt(2)),
-                q_value=L.Linear(hidden_size, output_size, initialW=np.zeros((output_size, hidden_size), dtype=np.float32))
+                q_value=L.Linear(2*hidden_size, output_size, initialW=np.zeros((output_size, hidden_size), dtype=np.float32))
+                lstm1 = L.Linear(input_size, hidden_size),
             )
             
     def to_cpu(self):
@@ -24,18 +25,20 @@ class QCalculationChain(chainer.Chain):
     def __call__(self, x):
         y = self.l4(x)
         y = F.relu(y)
-        y = self.q_value(y)
-        return y        
+        y2 = self.lstm1(x)
+        y = self.q_value(F.concat([y, y2]))
+        return y
 
 class DegInterestChain(chainer.Chain):
-    def __init__(self, feature_vec_size, feature_vec_count, q_value_size):
+    def __init__(self, feature_vec_size, feature_vec_count, q_value_size, lstm_hidden_dim):
         self.feature_vec_size = feature_vec_size
         self.feature_vec_count = feature_vec_count
         self.q_value_size = q_value_size
         self.input_size = feature_vec_size*feature_vec_count+q_value_size
+        self.lstm_hidden_dim = lstm_hidden_dim
         super(DegInterestChain, self).__init__(
-                lstm1 = L.LSTM(self.input_size, feature_vec_size),
-                l1 = L.Linear(feature_vec_size, feature_vec_size),
+                lstm1 = L.LSTM(self.input_size, lstm_hidden_dim),
+                l1 = L.Linear(lstm_hidden_dim, feature_vec_size),
             )
         self.reset_state()
             
@@ -62,18 +65,17 @@ class DegInterestChain(chainer.Chain):
         return self.P
 
     def calc_deg_interest(self, x):
-        print('calc_deg_interest')
         if self.P is None:
             self.P = Variable(x.data, volatile='auto')
         self.E = F.sum(abs(x - self.P))/self.feature_vec_size
-        return F.sigmoid(self.E)
-
+        return self.E
+        
 class QNet:
     # Hyper-Parameters
-    gamma = 0.99  # Discount factor
-    initial_exploration = 10**3  # Initial exploratoin. original: 5x10^4
+    gamma = 0.95  # Discount factor
+    initial_exploration = 10**1  # Initial exploratoin. original: 5x10^4
     replay_size = 32  # Replay (batch) size
-    target_model_update_freq = 10**4  # Target update frequancy. original: 10^4
+    target_model_update_freq = 5*10**1  # Target update frequancy. original: 10^4
     data_size = 10**5  # Data size of history. original: 10^6
     hist_size = 1 #original: 4
 
@@ -88,15 +90,15 @@ class QNet:
         print("Initializing Q-Network...")      
         self.model = QCalculationChain(self.dim*self.hist_size, self.hidden_dim, self.num_of_actions)
         if self.use_gpu >= 0:
-            self.model.to_gpu()
+            self.model.to_gpu(self.use_gpu)
         self.model_target = copy.deepcopy(self.model)
 
         self.optimizer = optimizers.RMSpropGraves(lr=0.00025, alpha=0.95, momentum=0.95, eps=0.0001)
         self.optimizer.setup(self.model)
         
-        self.Predictor = DegInterestChain(self.dim, self.hist_size, self.num_of_actions)
+        self.Predictor = DegInterestChain(self.dim, self.hist_size, self.num_of_actions, 1000)
         if self.use_gpu >= 0:
-            self.Predictor.to_gpu()
+            self.Predictor.to_gpu(self.use_gpu)
             
         self.optimizer_pred = optimizers.Adam()
         self.optimizer_pred.setup(self.Predictor)
@@ -127,7 +129,7 @@ class QNet:
             # make new array
             target = np.array(q.data, dtype=np.float32)
 
-        for i in xrange(num_of_batch):
+        for i in range(num_of_batch):
             if not episode_end[i][0]:
                 tmp_ = reward[i] + self.gamma * max_q_dash[i]
             else:
@@ -138,14 +140,14 @@ class QNet:
 
         # TD-error clipping
         if self.use_gpu >= 0:
-            target = cuda.to_gpu(target)
+            target = cuda.to_gpu(target, device=self.use_gpu)
         td = Variable(target) - q  # TD error
         td_tmp = td.data + 1000.0 * (abs(td.data) <= 1)  # Avoid zero division
         td_clip = td * (abs(td.data) <= 1) + td/abs(td_tmp) * (abs(td.data) > 1)
 
         zero_val = np.zeros((self.replay_size, self.num_of_actions), dtype=np.float32)
         if self.use_gpu >= 0:
-            zero_val = cuda.to_gpu(zero_val)
+            zero_val = cuda.to_gpu(zero_val, device=self.use_gpu)
         zero_val = Variable(zero_val)
         loss = F.mean_squared_error(td_clip, zero_val)
         return loss, q
@@ -179,7 +181,7 @@ class QNet:
             r_replay = np.ndarray(shape=(self.replay_size, 1), dtype=np.float32)
             s_dash_replay = np.ndarray(shape=(self.replay_size, self.hist_size, self.dim), dtype=np.float32)
             episode_end_replay = np.ndarray(shape=(self.replay_size, 1), dtype=np.bool)
-            for i in xrange(self.replay_size):
+            for i in range(self.replay_size):
                 s_replay[i] = np.asarray(self.d[0][replay_index[i]], dtype=np.float32)
                 a_replay[i] = self.d[1][replay_index[i]]
                 r_replay[i] = self.d[2][replay_index[i]]
@@ -187,8 +189,8 @@ class QNet:
                 episode_end_replay[i] = self.d[4][replay_index[i]]
 
             if self.use_gpu >= 0:
-                s_replay = cuda.to_gpu(s_replay)
-                s_dash_replay = cuda.to_gpu(s_dash_replay)
+                s_replay = cuda.to_gpu(s_replay, device=self.use_gpu)
+                s_dash_replay = cuda.to_gpu(s_dash_replay, device=self.use_gpu)
 
             # Gradient-based update
             self.optimizer.zero_grads()
@@ -204,7 +206,7 @@ class QNet:
     
     def e_greedy(self, state, epsilon):
         var_s = Variable(state)
-        deg_intereset = self.Predictor.calc_deg_interest(var_s[:, 0, :]).data
+        deg_intereset = float(self.Predictor.calc_deg_interest(var_s[:, 0, :]).data)
         self.predictor_error += self.Predictor.E
         
         var_q = self.model(var_s)
@@ -216,20 +218,21 @@ class QNet:
             print(" Random"),
         else:
             if self.use_gpu >= 0:
-                index_action = np.argmax(q.data.get())
+                index_action = int(cuda.cupy.argmax(q))
             else:
                 index_action = np.argmax(q)
             print("#Greedy"),
         return self.index_to_action(index_action), q, deg_intereset
-    
-    def target_model_update(self):
-        self.Predictor.zerozrads()
+
+    def prediction_update(self):
+        self.Predictor.zerograds()
         self.predictor_error.backward()
         self.predictor_error.unchain_backward()
         self.predictor_error = 0
-        self.optimizer_pred.uopdate()
-        self.Predictor.reset_state()
-        
+        self.optimizer_pred.update()
+        # self.Predictor.reset_state()    
+
+    def target_model_update(self):
         self.model_target = copy.deepcopy(self.model)
     
     def index_to_action(self, index_of_action):

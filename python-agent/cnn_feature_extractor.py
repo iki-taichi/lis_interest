@@ -25,7 +25,7 @@ class CnnFeatureExtractor:
         print('Loaded', file=sys.stderr)
         if self.gpu >= 0:
             cuda.get_device(self.gpu).use()
-            self.func.to_gpu()
+            self.func.to_gpu(self.gpu)
 
         if self.model_type == 'alexnet':
             self.in_size = 227
@@ -58,13 +58,13 @@ class CnnFeatureExtractor:
         x_data = xp.asarray(x_batch)
 
         if self.gpu >= 0:
-            x_data=cuda.to_gpu(x_data)
+            x_data=cuda.to_gpu(x_data, device=self.gpu)
         
         x = chainer.Variable(x_data, volatile=True)
         mat = self.call_external_model(x)
 
         if self.gpu >= 0:
-            mat = cuda.to_cpu(mat.data)
+            mat = cuda.to_cpu(mat.data, device=self.gpu)
             mat = mat.reshape(self.out_dim)
         else:
             mat = mat.data.reshape(self.out_dim)

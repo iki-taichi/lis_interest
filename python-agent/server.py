@@ -18,7 +18,7 @@ parser.add_argument('--port', '-p', default='8765', type=int,
                     help='websocket port')
 parser.add_argument('--ip', '-i', default='127.0.0.1',
                     help='server ip')
-parser.add_argument('--gpu', '-g', default=-1, type=int,
+parser.add_argument('--gpu', '-g', default=0, type=int,
                     help='GPU ID (negative value indicates CPU)')
 parser.add_argument('--log-file', '-l', default='reward.log', type=str,
                     help='reward log file name')
@@ -50,16 +50,16 @@ def agent_process(gpu_id, log_file, q_from_parent, q_to_parent):
             # data extraction
             dat = msgpack.unpackb(byte_data)
             image = [
-                    Image.open(io.BytesIO(bytearray(dat['image'][i])))
-                    for i in xrange(depth_image_count)
+                    Image.open(io.BytesIO(bytearray(dat[b'image'][i])))
+                    for i in range(depth_image_count)
                 ]
             depth = [
-                    np.array(ImageOps.grayscale(Image.open(io.BytesIO(bytearray(dat['depth'][i]))))).reshape(depth_image_dim) 
-                    for i in xrange(depth_image_count)
+                    np.array(ImageOps.grayscale(Image.open(io.BytesIO(bytearray(dat[b'depth'][i]))))).reshape(depth_image_dim) 
+                    for i in range(depth_image_count)
                 ]
             observation = {"image": image, "depth": depth}
-            reward = dat['reward']
-            end_episode = dat['endEpisode']
+            reward = dat[b'reward']
+            end_episode = dat[b'endEpisode']
         
             # action-making
             ret = None
